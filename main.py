@@ -49,6 +49,74 @@ class MDSIteratedGreedy:
         
         return minimal_solution
     
+    def _get_exclusively_dominated_vertices(self, solution, vertex):
+        exclusively_dominated = set()
+        
+        if vertex in solution:
+            other_dominators = solution - {vertex}
+            dominated_by_others = set()
+            for u in other_dominators:
+                dominated_by_others.update(self.adjacency[u])
+                dominated_by_others.add(u)
+            
+            if vertex not in dominated_by_others:
+                exclusively_dominated.add(vertex)
+        
+        for neighbor in self.adjacency[vertex]:
+            dominated_by_others = False
+            for u in solution - {vertex}:
+                if neighbor in self.adjacency[u] or neighbor == u:
+                    dominated_by_others = True
+                    break
+            
+            if not dominated_by_others:
+                exclusively_dominated.add(neighbor)
+        
+        return exclusively_dominated
+    
+    def efficient_local_search(self, solution):
+        current_solution = set(solution)
+        improved = True
+        
+        solution_list = list(current_solution)
+        
+        while improved:
+            improved = False
+            random.shuffle(solution_list)
+            
+            for u in solution_list:
+                if u not in current_solution:
+                    continue
+                    
+                exclusive_dominated = self._get_exclusively_dominated_vertices(current_solution, u)
+                
+                available_vertices = self.vertices - current_solution - self.leaf_vertices
+                available_vertices_list = list(available_vertices)
+                random.shuffle(available_vertices_list)
+                
+                for v in available_vertices_list:
+                    can_replace = True
+                    for w in exclusive_dominated:
+                        if w != v and w not in self.adjacency[v]:
+                            can_replace = False
+                            break
+                    
+                    if can_replace:
+                        new_solution = (current_solution - {u}) | {v}
+                        
+                        new_solution = self._remove_redundant_vertices(new_solution)
+                        
+                        if len(new_solution) < len(current_solution):
+                            current_solution = new_solution
+                            solution_list = list(current_solution)
+                            improved = True
+                            break
+                
+                if improved:
+                    break
+        
+        return current_solution
+    
     def greedy_insertion_procedure(self, partial_solution=None):
         solution = set(self.support_vertices) if partial_solution is None else partial_solution
         dominated = self._get_dominated_vertices(solution)
@@ -100,6 +168,7 @@ class MDSIteratedGreedy:
     
     def solve(self):
         current_solution = self.greedy_insertion_procedure()
+        current_solution = self.efficient_local_search(current_solution)
         best_solution = set(current_solution)
         best_size = len(best_solution)
         
@@ -108,6 +177,7 @@ class MDSIteratedGreedy:
         while iterations_without_improvement < self.max_no_improvement:
             destroyed_solution = self.random_destruction(current_solution)
             new_solution = self.greedy_reconstruction(destroyed_solution)
+            new_solution = self.efficient_local_search(new_solution)
             new_size = len(new_solution)
             
             if new_size < best_size:
